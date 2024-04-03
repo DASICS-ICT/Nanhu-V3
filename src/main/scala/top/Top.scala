@@ -138,7 +138,7 @@ class XSTop()(implicit p: Parameters) extends BaseXSSoc() with HasSoCParameter {
     memory <> misc.memory
 
     val io = IO(new Bundle {
-      val clock = Input(Bool())
+      val clock = Input(Clock())
       val reset = Input(AsyncReset())
       val extIntrs = Input(UInt(NrExtIntr.W))
       val systemjtag = new Bundle {
@@ -157,22 +157,29 @@ class XSTop()(implicit p: Parameters) extends BaseXSSoc() with HasSoCParameter {
     val dft_lgc_rst_n = IO(Input(AsyncReset()))
     val dft_mode = IO(Input(Bool()))
     val rtc_clock = IO(Input(Bool()))
-    val dfx_reset = Wire(new DFTResetSignals())
+    val dfx = Wire(new DFTResetSignals())
     val bootrom_disable = IO(Input(Bool()))     //1: disable bootrom; 0: bootrom check enable
-    dfx_reset.lgc_rst_n := dft_lgc_rst_n
-    dfx_reset.mode := dft_mode
-    dfx_reset.scan_mode := scan_mode
+    dfx.lgc_rst_n := dft_lgc_rst_n
+    dfx.mode := dft_mode
+    dfx.scan_mode := scan_mode
 
-    val reset_sync = withClockAndReset(io.clock.asClock, io.reset) {
-      ResetGen(2, Some(dfx_reset))
-    }
-    val jtag_reset_sync = withClockAndReset(io.systemjtag.jtag.TCK, io.systemjtag.reset) {
-      ResetGen(2, Some(dfx_reset))
+    private val sysRst = Wire(AsyncReset())
+    private val sysClock = Wire(Clock())
+    private val periClock = Wire(Clock())
+    withClockAndReset(io.clock, io.reset) {
+      val topCrg = Module(new TopCrg)
+      topCrg.io.dfx := dfx
+      sysRst := topCrg.io.sysReset
+      sysClock := topCrg.io.sysClock
+      periClock := topCrg.io.periClock
     }
 
-    // override LazyRawModuleImp's clock and reset
-    childClock := io.clock.asClock
-    childReset := reset_sync
+    private val jtag_reset_sync = withClockAndReset(io.systemjtag.jtag.TCK, io.systemjtag.reset) {
+      ResetGen(2, Some(dfx))
+    }
+
+    childClock := sysClock
+    childReset := sysRst
 
     // output
     io.debug_reset := misc.module.debug_module_io.debugIO.ndreset
@@ -185,15 +192,16 @@ class XSTop()(implicit p: Parameters) extends BaseXSSoc() with HasSoCParameter {
     dontTouch(scan_mode)
     dontTouch(dft_lgc_rst_n)
     dontTouch(dft_mode)
-    dontTouch(dfx_reset)
+    dontTouch(dfx)
     dontTouch(bootrom_disable)
-    misc.module.ext_intrs := io.extIntrs
-    misc.module.dfx_reset := dfx_reset
-    misc.module.rtc_clock := rtc_clock
+    misc.module.extIntrs := io.extIntrs
+    misc.module.dfx := dfx
+    misc.module.rtcClock := rtc_clock
+    misc.module.periClock := periClock
 
     for ((core, i) <- core_with_l2.zipWithIndex) {
       core.module.io.hartId := i.U
-      core.module.io.dfx_reset := dfx_reset
+      core.module.io.dfx_reset := dfx
       core.module.io.reset_vector := io.riscv_rst_vec(i)
       //zdr: ROM init enable
       core.module.io.XStileResetGate := !(misc.module.ROMInitEn | bootrom_disable)
@@ -203,16 +211,16 @@ class XSTop()(implicit p: Parameters) extends BaseXSSoc() with HasSoCParameter {
 
     if (l3cacheOpt.isDefined) {
       if (l3cacheOpt.get.module.dfx_reset.isDefined) {
-        l3cacheOpt.get.module.dfx_reset.get := dfx_reset
+        l3cacheOpt.get.module.dfx_reset.get := dfx
       }
     }
 
     misc.module.debug_module_io.resetCtrl.hartIsInReset := core_with_l2.map(_.module.ireset.asBool)
-    misc.module.debug_module_io.clock := io.clock
+    misc.module.debug_module_io.clock := io.clock.asBool
     misc.module.debug_module_io.reset := misc.module.reset
 
     misc.module.debug_module_io.debugIO.reset := misc.module.reset
-    misc.module.debug_module_io.debugIO.clock := io.clock.asClock
+    misc.module.debug_module_io.debugIO.clock := io.clock
     // TODO: delay 3 cycles?
     misc.module.debug_module_io.debugIO.dmactiveAck := misc.module.debug_module_io.debugIO.dmactive
     // jtag connector
@@ -224,14 +232,14 @@ class XSTop()(implicit p: Parameters) extends BaseXSSoc() with HasSoCParameter {
       x.version := io.systemjtag.version
     }
 
-    val mbistBroadCastToTile = if (core_with_l2.head.module.dft.isDefined) {
+    private val mbistBroadCastToTile = if (core_with_l2.head.module.dft.isDefined) {
       val res = Some(Wire(new BroadCastBundle))
       core_with_l2.foreach(_.module.dft.get := res.get)
       res
     } else {
       None
     }
-    val mbistBroadCastToL3 = if (l3cacheOpt.isDefined) {
+    private val mbistBroadCastToL3 = if (l3cacheOpt.isDefined) {
       if (l3cacheOpt.get.module.dft.isDefined) {
         val res = Some(Wire(new BroadCastBundle))
         l3cacheOpt.get.module.dft.get := res.get
@@ -242,7 +250,7 @@ class XSTop()(implicit p: Parameters) extends BaseXSSoc() with HasSoCParameter {
     } else {
       None
     }
-    val mbistBroadCastToMisc = if (misc.module.dft.isDefined) {
+    private val mbistBroadCastToMisc = if (misc.module.dft.isDefined) {
       val res = Some(Wire(new BroadCastBundle))
       misc.module.dft.get := res.get
       res
@@ -289,7 +297,7 @@ class XSTop()(implicit p: Parameters) extends BaseXSSoc() with HasSoCParameter {
     })
 
     /** ***************************************l3 & misc Mbist Share Bus************************************** */
-    withClockAndReset(io.clock.asClock, reset_sync) {
+    withClockAndReset(sysClock, sysRst) {
       val miscPipeLine = if (p(SoCParamsKey).hasMbist && p(SoCParamsKey).hasShareBus) {
         MBISTPipeline.PlaceMbistPipeline(Int.MaxValue, s"MBIST_L3", true)
       } else {
@@ -320,8 +328,8 @@ class XSTop()(implicit p: Parameters) extends BaseXSSoc() with HasSoCParameter {
       // reset ----> SYNC --> {SoCMisc, L3 Cache, Cores}
       val coreResetChain: Seq[Reset] = core_with_l2.map(_.module.ireset)
       val resetChain = Seq(misc.module.reset) ++ l3cacheOpt.map(_.module.reset) ++ coreResetChain
-      val resetDftSigs = ResetGen.applyOneLevel(resetChain, reset_sync, !debugOpts.FPGAPlatform)
-      resetDftSigs := dfx_reset
+      val resetDftSigs = ResetGen.applyOneLevel(resetChain, sysRst, !debugOpts.FPGAPlatform)
+      resetDftSigs := dfx
     }
   }
 }

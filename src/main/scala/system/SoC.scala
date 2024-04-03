@@ -269,9 +269,10 @@ class SoCMisc()(implicit p: Parameters) extends BaseSoC
 }
 class SoCMiscImp(outer:SoCMisc)(implicit p: Parameters) extends LazyModuleImp(outer) {
   val debug_module_io = IO(new DebugModuleIO(outer.NumCores))
-  val ext_intrs = IO(Input(UInt(outer.NrExtIntr.W)))
-  val dfx_reset = IO(Input(new DFTResetSignals()))
-  val rtc_clock = IO(Input(Bool()))
+  val extIntrs = IO(Input(UInt(outer.NrExtIntr.W)))
+  val dfx = IO(Input(new DFTResetSignals()))
+  val rtcClock = IO(Input(Bool()))
+  val periClock = IO(Input(Clock()))
   val ROMInitEn = IO(Output(Bool()))
 
   val sigFromSrams = if (p(SoCParamsKey).hasMbist) Some(SRAMTemplate.genBroadCastBundleTop()) else None
@@ -281,31 +282,16 @@ class SoCMiscImp(outer:SoCMisc)(implicit p: Parameters) extends LazyModuleImp(ou
     dontTouch(dft.get)
   }
 
-  private val gt_ff = RegInit(true.B)
-  gt_ff := ~gt_ff
-
-  private val clk_gt = if(outer.periHf) {
-    val cgt = Module(new STD_CLKGT_func)
-    cgt.io.E := gt_ff
-    cgt.io.TE := false.B
-    cgt.io.CK := clock
-    cgt.io.dft_l3dataram_clk := false.B
-    cgt.io.dft_l3dataramclk_bypass := false.B
-    Some(cgt)
-  } else {
-    None
-  }
-
   outer.periCx.module.debug_module_io <> debug_module_io
-  outer.periCx.module.ext_intrs := ext_intrs
+  outer.periCx.module.ext_intrs := extIntrs
   if(outer.periHf){
-    outer.periCx.module.clock := clk_gt.get.io.Q
+    outer.periCx.module.clock := periClock
   } else {
     outer.periCx.module.clock := clock
   }
-  outer.periCx.module.reset := ResetGen(3, Some(dfx_reset))
-  outer.periCx.module.dfx_reset := dfx_reset
-  outer.periCx.module.rtc_clock := rtc_clock
+  outer.periCx.module.reset := ResetGen(3, Some(dfx))
+  outer.periCx.module.dfx_reset := dfx
+  outer.periCx.module.rtc_clock := rtcClock
   ROMInitEn := outer.periCx.module.ROMInitEn
 }
 
