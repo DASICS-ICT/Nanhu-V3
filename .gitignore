@@ -365,3 +365,6 @@ sim
 
 novas*
 verdiLog/
+
+# emu temporary folder
+emu/

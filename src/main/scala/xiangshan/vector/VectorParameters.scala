@@ -27,6 +27,27 @@ import org.chipsalliance.cde.config._
 import xiangshan.HasXSParameter
 
 case class VectorParameters (
+    // //decode
+    // vDecodeWidth: Int       = 4,
+    // //vector instr rename
+    // vRenameWidth: Int       = 1,
+    // vCommitWidth: Int       = 1,
+    // vPhyRegsNum: Int        = 64,
+    // vWaitQueueNum: Int      = 1,
+    // vVtypeRegsNum: Int      = 1,
+    // //dispatch
+    // vDispatchQueueMem: Int      = 2,
+    // vDispatchQueuePermu: Int    = 2,
+    // vDispatchQueueCommon: Int   = 2,
+    // vDispatchTypeNum: Int = 3,
+    // //rs
+    // vRsDepth: Int       = 4,
+    // vRsOIQDepth: Int    = 2,
+    // vPRsDepth: Int      = 1,
+    // //merge
+    // vMergeBufferDepth: Int = 1,
+    // vMergeWbWdith: Int = 1
+    
     //decode
     vDecodeWidth: Int       = 4,
     //vector instr rename
@@ -48,7 +69,7 @@ case class VectorParameters (
     vMergeBufferDepth: Int = 32,
     vMergeWbWdith: Int = 2
 ) {
-    val vLen: Int = 128 //maybe 64、256、512...
+    val vLen: Int = 64 //maybe 64、256、512...
     val vMergeBufferAllocateWidth: Int = vDecodeWidth
     def vPhyRegIdxWidth: Int = log2Up(vPhyRegsNum)
 }
