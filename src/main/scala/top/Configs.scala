@@ -29,6 +29,7 @@ import freechips.rocketchip.devices.debug._
 import freechips.rocketchip.tile.MaxHartIdBits
 import xiangshan.cache.DCacheParameters
 import xiangshan.cache.mmu.{L2TLBParameters, TLBParameters}
+import xiangshan.vector.VectorParameters
 import xiangshan.backend.execute.exublock.ExuParameters
 import device.{EnableJtag, XSDebugModuleParams}
 import huancun._
@@ -65,25 +66,26 @@ class BaseConfig(n: Int, mbist:Boolean = false) extends Config((site, here, up) 
 // * L1 cache included
 // * L2 cache NOT included
 // * L3 cache included
-class MinimalConfig(n: Int = 1) extends Config(
+class MinimalCoreConfig(n: Int = 1) extends Config(
   new BaseConfig(n).alter((site, here, up) => {
     case XSTileKey => up(XSTileKey).map(
       _.copy(
-        DecodeWidth = 2,
-        RenameWidth = 2,
+        DecodeWidth = 4,
+        RenameWidth = 4,
         FetchWidth = 4,
         NRPhyRegs = 64,
-        LoadQueueSize = 16,
+        LoadQueueSize = 5,
         LoadQueueNWriteBanks = 4,
-        StoreQueueSize = 12,
+        StoreQueueSize = 8,
         StoreQueueNWriteBanks = 4,
         RobSize = 32,
+        intRsDepth  = 8,
+        fpRsDepth = 8,
+        memRsDepth = 12,
         FtqSize = 8,
         IBufSize = 16,
         StoreBufferSize = 4,
         StoreBufferThreshold = 3,
-        exuParameters = ExuParameters(),
-        prefetcher = None,
         icacheParameters = ICacheParameters(
           nSets = 64, // 16KB ICache
           tagECC = Some("parity"),
@@ -95,16 +97,6 @@ class MinimalConfig(n: Int = 1) extends Config(
           nPrefetchEntries = 2,
           hasPrefetch = false
         ),
-        dcacheParametersOpt = Some(DCacheParameters(
-          nSets = 64, // 32KB DCache
-          nWays = 8,
-          tagECC = Some("secded"),
-          dataECC = Some("secded"),
-          replacer = Some("setplru"),
-          nMissEntries = 4,
-          nProbeEntries = 4,
-          nReleaseEntries = 8,
-        )),
         EnableBPD = false, // disable TAGE
         EnableLoop = false,
         itlbParameters = TLBParameters(
@@ -156,37 +148,32 @@ class MinimalConfig(n: Int = 1) extends Config(
           l3nWays = 8,
           spSize = 2,
         ),
-        // L2CacheParamsOpt = None // remove L2 Cache
-        // L2CacheParamsOpt = Some(L2Param(
-        //   name = "L2",
-        //   ways = 8,
-        //   sets = 128,
-        //   echoField = Seq(huancun.DirtyField()),
-        //   prefetch = None
-        // )),
-        // L2NBanks = 2,
-        // prefetcher = None // if L2 pf_recv_node does not exist, disable SMS prefetcher
+        vectorParameters = VectorParameters(
+          vDecodeWidth = 4,
+          vRenameWidth = 4,
+          vCommitWidth = 4,
+          vPhyRegsNum = 48,
+          vWaitQueueNum = 12,
+          vVtypeRegsNum = 6,
+          vDispatchQueueMem = 8,
+          vDispatchQueuePermu = 8,
+          vDispatchQueueCommon = 12,
+          vRsDepth = 8,
+          vMergeBufferDepth = 16
+        ),
+        exuParameters = ExuParameters(
+          JmpCnt = 1,
+          AluMiscCnt = 1,
+          AluDivCnt = 1,
+          AluMulCnt = 2,
+          FmaCnt = 2,
+          FmaDivCnt = 1,
+          FmaMiscCnt = 1,
+          LduCnt = 2,
+          StuCnt = 2
+        )
       )
     )
-    case SoCParamsKey =>
-      val tiles = site(XSTileKey)
-      up(SoCParamsKey).copy(
-        L3CacheParamsOpt = Some(up(SoCParamsKey).L3CacheParamsOpt.get.copy(
-          // sets = 1024,
-          // inclusive = false,
-          // clientCaches = tiles.map{ p =>
-          //   CacheParameters(
-          //     "dcache",
-          //     sets = 2 * p.dcacheParametersOpt.get.nSets,
-          //     ways = p.dcacheParametersOpt.get.nWays + 2,
-          //     blockGranularity = log2Ceil(2 * p.dcacheParametersOpt.get.nSets),
-          //     aliasBitsOpt = None
-          //   )
-          // },
-          // simulation = !site(DebugOptionsKey).FPGAPlatform
-        )),
-        L3NBanks = 1
-      )
   })
 )
 
@@ -216,6 +203,23 @@ class WithNKBL1D(n: Int, ways: Int = 4) extends Config((site, here, up) => {
         nMissEntries = 16,
         nProbeEntries = 8,
         nReleaseEntries = 18
+      ))
+    ))
+})
+
+class WithMinimalNKBL1D(n: Int, ways: Int = 4) extends Config((site, here, up) => {
+  case XSTileKey =>
+    val sets = n * 1024 / ways / 64
+    up(XSTileKey).map(_.copy(
+      dcacheParametersOpt = Some(DCacheParameters(
+        nSets = sets,
+        nWays = ways,
+        tagECC = Some("secded"),
+        dataECC = Some("secded"),
+        replacer = Some("setplru"),
+        nMissEntries = 4,
+        nProbeEntries = 4,
+        nReleaseEntries = 8
       ))
     ))
 })
@@ -348,5 +352,12 @@ class DefaultConfig(n: Int = 1) extends Config(
     ++ new WithNKBL2(256, inclusive = false, banks = 2, ways = 8, alwaysReleaseData = true)
     ++ new WithNKBL1D(64)
     ++ new BaseConfig(n)
+)
+
+class MinimalConfig(n: Int = 1) extends Config(
+  new WithNKBL3(512, inclusive = false, banks = 4, ways = 4, core_num = n)
+    ++ new WithNKBL2(128, inclusive = false, banks = 2, ways = 4, alwaysReleaseData = true)
+    ++ new WithMinimalNKBL1D(16)
+    ++ new MinimalCoreConfig(n)
 )
 
