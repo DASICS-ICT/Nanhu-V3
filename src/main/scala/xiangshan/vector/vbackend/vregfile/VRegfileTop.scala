@@ -102,8 +102,8 @@ class VRegfileTop(extraVectorRfReadPort: Int)(implicit p:Parameters) extends Laz
 
     private val readPortsNum = fromRs.length * 4 + extraVectorRfReadPort
 
-    private val vrf = Module(new VRegfile(wbPairNeedMerge.length, wbPairDontNeedMerge.length, readPortsNum))
-    vrf.io.vecAllocPregs.zip(io.vecAllocPregs).foreach({case(a, b) => a := Pipe(b)})
+    // private val vrf = Module(new VRegfile(wbPairNeedMerge.length, wbPairDontNeedMerge.length, readPortsNum))
+    // vrf.io.vecAllocPregs.zip(io.vecAllocPregs).foreach({case(a, b) => a := Pipe(b)})
 
     println("====================VRF writeback port:====================")
     wbVFUPair.foreach(e => print(e._3))
@@ -114,50 +114,50 @@ class VRegfileTop(extraVectorRfReadPort: Int)(implicit p:Parameters) extends Laz
     println("\n====================VRF writeback port not need merged:====================")
     wbPairDontNeedMerge.foreach(e => print(e._3))
 
-    vrf.io.wbWakeup.zip(vrf.io.wakeupMask).zip(wbPairNeedMerge).foreach({case((rfwb, rfwkp),(wbin, wbout, cfg)) =>
-      if(cfg.exuType == ExuType.ldu){
-        val sew = wbin.bits.uop.vctrl.eew(2)
-        val bitsWire = WireInit(wbin.bits)
-        bitsWire.data := MuxCase(0.U, Seq(
-          (sew === 0.U) -> Cat(Seq.fill(VLEN / 8)(wbin.bits.data(7, 0))),
-          (sew === 1.U) -> Cat(Seq.fill(VLEN / 16)(wbin.bits.data(15, 0))),
-          (sew === 2.U) -> Cat(Seq.fill(VLEN / 32)(wbin.bits.data(31, 0))),
-          (sew === 3.U) -> Cat(Seq.fill(VLEN / 64)(wbin.bits.data(63, 0)))
-        ))
-        val validReg = RegNext(wbin.valid && !wbin.bits.uop.robIdx.needFlush(io.redirect), false.B)
-        val bitsReg = RegEnable(bitsWire, wbin.valid)
-        val lmask = GenLoadVrfMask(bitsReg.uop, VLEN)
-        rfwb.valid := validReg
-        rfwb.bits := bitsReg
-        rfwb.bits.wakeupMask := lmask
-        rfwb.bits.writeDataMask := Mux(bitsReg.uop.cf.exceptionVec.reduce(_ | _), 0.U((VLEN / 8).W), lmask)
-        rfwb.bits.redirectValid := false.B
-        rfwb.bits.redirect := DontCare
-      } else {
-        rfwb.valid := wbin.valid
-        rfwb.bits := wbin.bits
-        rfwb.bits.writeDataMask := Mux(wbin.bits.uop.ctrl.vdWen, wbin.bits.writeDataMask, 0.U)
-        rfwb.bits.wakeupMask := Mux(wbin.bits.uop.ctrl.vdWen, wbin.bits.wakeupMask, 0.U)
-      }
-      val wbBitsReg = RegEnable(rfwb.bits, rfwb.valid)
-      wbout.valid := RegNext(rfwb.valid && !rfwb.bits.uop.robIdx.needFlush(io.redirect), false.B)
-      wbout.bits := wbBitsReg
-      if(cfg.exuType == ExuType.ldu){
-        wbout.bits.wakeupValid := rfwkp.andR
-        wbout.bits.uop.uopIdx := wbout.bits.uop.segIdx
-      } else {
-        wbout.bits.wakeupValid := rfwkp.andR || wbBitsReg.uop.ctrl.fpWen || wbBitsReg.uop.ctrl.rfWen
-      }
-    })
-    vrf.io.wbNoWakeup.zip(wbPairDontNeedMerge).foreach({case(rfwb, (wbin, wbout, _)) =>
-      rfwb.valid := wbin.valid && wbin.bits.uop.ctrl.vdWen
-      rfwb.bits := wbin.bits
-      wbout.valid := RegNext(wbin.valid & !wbin.bits.uop.robIdx.needFlush(io.redirect), false.B)
-      wbout.bits := RegEnable(wbin.bits, wbin.valid)
-      wbout.bits.wakeupValid := true.B
-      wbout.bits.redirectValid := false.B
-      wbout.bits.redirect := DontCare
-    })
+    // vrf.io.wbWakeup.zip(vrf.io.wakeupMask).zip(wbPairNeedMerge).foreach({case((rfwb, rfwkp),(wbin, wbout, cfg)) =>
+    //   if(cfg.exuType == ExuType.ldu){
+    //     val sew = wbin.bits.uop.vctrl.eew(2)
+    //     val bitsWire = WireInit(wbin.bits)
+    //     bitsWire.data := MuxCase(0.U, Seq(
+    //       (sew === 0.U) -> Cat(Seq.fill(VLEN / 8)(wbin.bits.data(7, 0))),
+    //       (sew === 1.U) -> Cat(Seq.fill(VLEN / 16)(wbin.bits.data(15, 0))),
+    //       (sew === 2.U) -> Cat(Seq.fill(VLEN / 32)(wbin.bits.data(31, 0))),
+    //       (sew === 3.U) -> Cat(Seq.fill(VLEN / 64)(wbin.bits.data(63, 0)))
+    //     ))
+    //     val validReg = RegNext(wbin.valid && !wbin.bits.uop.robIdx.needFlush(io.redirect), false.B)
+    //     val bitsReg = RegEnable(bitsWire, wbin.valid)
+    //     val lmask = GenLoadVrfMask(bitsReg.uop, VLEN)
+    //     rfwb.valid := validReg
+    //     rfwb.bits := bitsReg
+    //     rfwb.bits.wakeupMask := lmask
+    //     rfwb.bits.writeDataMask := Mux(bitsReg.uop.cf.exceptionVec.reduce(_ | _), 0.U((VLEN / 8).W), lmask)
+    //     rfwb.bits.redirectValid := false.B
+    //     rfwb.bits.redirect := DontCare
+    //   } else {
+    //     rfwb.valid := wbin.valid
+    //     rfwb.bits := wbin.bits
+    //     rfwb.bits.writeDataMask := Mux(wbin.bits.uop.ctrl.vdWen, wbin.bits.writeDataMask, 0.U)
+    //     rfwb.bits.wakeupMask := Mux(wbin.bits.uop.ctrl.vdWen, wbin.bits.wakeupMask, 0.U)
+    //   }
+    //   val wbBitsReg = RegEnable(rfwb.bits, rfwb.valid)
+    //   wbout.valid := RegNext(rfwb.valid && !rfwb.bits.uop.robIdx.needFlush(io.redirect), false.B)
+    //   wbout.bits := wbBitsReg
+    //   if(cfg.exuType == ExuType.ldu){
+    //     wbout.bits.wakeupValid := rfwkp.andR
+    //     wbout.bits.uop.uopIdx := wbout.bits.uop.segIdx
+    //   } else {
+    //     wbout.bits.wakeupValid := rfwkp.andR || wbBitsReg.uop.ctrl.fpWen || wbBitsReg.uop.ctrl.rfWen
+    //   }
+    // })
+    // vrf.io.wbNoWakeup.zip(wbPairDontNeedMerge).foreach({case(rfwb, (wbin, wbout, _)) =>
+    //   rfwb.valid := wbin.valid && wbin.bits.uop.ctrl.vdWen
+    //   rfwb.bits := wbin.bits
+    //   wbout.valid := RegNext(wbin.valid & !wbin.bits.uop.robIdx.needFlush(io.redirect), false.B)
+    //   wbout.bits := RegEnable(wbin.bits, wbin.valid)
+    //   wbout.bits.wakeupValid := true.B
+    //   wbout.bits.redirectValid := false.B
+    //   wbout.bits.redirect := DontCare
+    // })
     wbPairStu.foreach({case(wbin, wbout, cfg) =>
       val validReg = RegNext(wbin.valid & !wbin.bits.uop.robIdx.needFlush(io.redirect), false.B)
       val bitsReg = RegEnable(wbin.bits, wbin.valid)
@@ -171,11 +171,14 @@ class VRegfileTop(extraVectorRfReadPort: Int)(implicit p:Parameters) extends Laz
       wbout.bits.redirectValid := redirectValidReg && !redirectBitsReg.robIdx.needFlush(io.redirect)
       wbout.bits.redirect := redirectBitsReg
     })
-    vrf.io.moveOldValReqs.zip(io.moveOldValReqs).foreach({case(a, b) => a := Pipe(b)})
-    vrf.io.readPorts.take(extraVectorRfReadPort).zip(io.vectorReads).foreach({case(rr, ir) =>
-      rr.addr := ir.addr
-      ir.data := rr.data
-    })
+    io.vectorReads.map{ port =>
+      port.data := 0.U.asTypeOf(UInt(VLEN.W))
+    }
+    // vrf.io.moveOldValReqs.zip(io.moveOldValReqs).foreach({case(a, b) => a := Pipe(b)})
+    // vrf.io.readPorts.take(extraVectorRfReadPort).zip(io.vectorReads).foreach({case(rr, ir) =>
+    //   rr.addr := ir.addr
+    //   ir.data := rr.data
+    // })
     private val lduWbs = toWritebackNetwork.filter(_._2.exuType == ExuType.ldu)
     lduWbs.zipWithIndex.foreach({case(lwb, i) =>
       val preLduWbs = lduWbs.take(i)
@@ -196,20 +199,15 @@ class VRegfileTop(extraVectorRfReadPort: Int)(implicit p:Parameters) extends Laz
       io.scalarReads(scalarReadPortIdx).addr := bi.specialPsrc
       val idata = RegEnable(io.scalarReads(scalarReadPortIdx).idata, bi.specialPsrcRen)
       val fdata = RegEnable(io.scalarReads(scalarReadPortIdx).fdata, bi.specialPsrcRen)
-      vrf.io.readPorts(vecReadPortIdx).addr := bi.issue.bits.uop.psrc(0)
-      vrf.io.readPorts(vecReadPortIdx + 1).addr := bi.issue.bits.uop.psrc(1)
-      vrf.io.readPorts(vecReadPortIdx + 2).addr := bi.issue.bits.uop.psrc(2)
-      vrf.io.readPorts(vecReadPortIdx + 3).addr := bi.issue.bits.uop.vm
+      // vrf.io.readPorts(vecReadPortIdx).addr := bi.issue.bits.uop.psrc(0)
+      // vrf.io.readPorts(vecReadPortIdx + 1).addr := bi.issue.bits.uop.psrc(1)
+      // vrf.io.readPorts(vecReadPortIdx + 2).addr := bi.issue.bits.uop.psrc(2)
+      // vrf.io.readPorts(vecReadPortIdx + 3).addr := bi.issue.bits.uop.vm
 
-      exuInBundle.src(0) := MuxCase(vrf.io.readPorts(vecReadPortIdx).data, Seq(
-        SrcType.isReg(bi.issue.bits.uop.ctrl.srcType(0)) -> idata,
-        SrcType.isFp(bi.issue.bits.uop.ctrl.srcType(0)) -> fdata,
-        SrcType.isVec(bi.issue.bits.uop.ctrl.srcType(0)) -> vrf.io.readPorts(vecReadPortIdx).data,
-        SrcType.isImm(bi.issue.bits.uop.ctrl.srcType(0)) -> SignExt(bi.issue.bits.uop.ctrl.imm(4,0), VLEN)
-      ))
-      exuInBundle.src(1) := vrf.io.readPorts(vecReadPortIdx + 1).data
-      exuInBundle.src(2) := vrf.io.readPorts(vecReadPortIdx + 2).data
-      exuInBundle.vm := vrf.io.readPorts(vecReadPortIdx + 3).data
+      exuInBundle.src(0) := idata
+      exuInBundle.src(1) := DontCare//vrf.io.readPorts(vecReadPortIdx + 1).data
+      exuInBundle.src(2) := DontCare//vrf.io.readPorts(vecReadPortIdx + 2).data
+      exuInBundle.vm := DontCare//vrf.io.readPorts(vecReadPortIdx + 3).data
 
       val issValidReg = RegInit(false.B)
       val issDataReg = Reg(new ExuInput())
@@ -232,17 +230,20 @@ class VRegfileTop(extraVectorRfReadPort: Int)(implicit p:Parameters) extends Laz
       vecReadPortIdx = vecReadPortIdx + 4
     }
 
-    if(vrf.io.debug.isDefined) vrf.io.debug.get.zipWithIndex.foreach { case (rp, i) => rp.addr := io.debug_vec_rat(i) }
+    // if(vrf.io.debug.isDefined) vrf.io.debug.get.zipWithIndex.foreach { case (rp, i) => rp.addr := io.debug_vec_rat(i) }
 
     if (env.AlwaysBasicDiff || env.EnableDifftest) {
       val difftestArchVec = DifftestModule(new DiffArchVecRegState)
       difftestArchVec.coreid := io.hartId
-      vrf.io.debug.get.zipWithIndex.foreach {
-        case (rp, i) => {
-          difftestArchVec.value(i*2) := rp.data(VLEN/2-1, 0)
-          difftestArchVec.value(i*2+1) := rp.data(VLEN-1, VLEN/2)
-        }
+      difftestArchVec.value.map{reg =>
+        reg := 0.U.asTypeOf(UInt(64.W))
       }
+      // vrf.io.debug.get.zipWithIndex.foreach {
+      //   case (rp, i) => {
+      //     difftestArchVec.value(i*2) := rp.data(VLEN/2-1, 0)
+      //     difftestArchVec.value(i*2+1) := rp.data(VLEN-1, VLEN/2)
+      //   }
+      // }
     }
   }
 }

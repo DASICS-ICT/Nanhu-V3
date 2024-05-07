@@ -11,11 +11,11 @@ import xiangshan.vector.vbackend.vexecute.vexu.{VAluExu, VDivExu, VFpExu, VMacEx
 
 class VectorFuComplex(id: Int)(implicit p:Parameters) extends BasicExuComplex{
   private val valu = LazyModule(new VAluExu(id, "VectorFuComplex"))
-  private val vdiv = LazyModule(new VDivExu(id, "VectorFuComplex"))
-  private val vfp = LazyModule(new VFpExu(id, "VectorFuComplex"))
-  private val vmac = LazyModule(new VMacExu(id, "VectorFuComplex"))
+  // private val vdiv = LazyModule(new VDivExu(id, "VectorFuComplex"))
+  // private val vfp = LazyModule(new VFpExu(id, "VectorFuComplex"))
+  // private val vmac = LazyModule(new VMacExu(id, "VectorFuComplex"))
 
-  private val fuSeq = Seq(valu, vdiv, vfp, vmac)
+  private val fuSeq = Seq(valu)
 
   for(fu <- fuSeq){
     fu.issueNode :*= issueNode
@@ -28,8 +28,8 @@ class VectorFuComplex(id: Int)(implicit p:Parameters) extends BasicExuComplex{
     require(issueNode.out.length == fuSeq.length)
     private val issueIn = issueNode.in.head._1
     private val fuIssPorts = issueNode.out.map(_._1)
-    private val vfpIss = issueNode.out.filter(_._2._2.exuType == ExuType.vfp).head._1
-    private val vdivIss = issueNode.out.filter(_._2._2.exuType == ExuType.vdiv).head._1
+    // private val vfpIss = issueNode.out.filter(_._2._2.exuType == ExuType.vfp).head._1
+    // private val vdivIss = issueNode.out.filter(_._2._2.exuType == ExuType.vdiv).head._1
     val io = IO(new Bundle {
       val vstart = Input(UInt(log2Up(VLEN).W))
       val vcsr = Input(UInt(3.W))
@@ -57,10 +57,7 @@ class VectorFuComplex(id: Int)(implicit p:Parameters) extends BasicExuComplex{
         fu.module.io.frm := io.frm
     })
 
-    issueIn.issue.ready := MuxCase(true.B, Seq(
-      (issueIn.issue.bits.uop.ctrl.fuType === FuType.vfp) -> vfpIss.issue.ready,
-      (issueIn.issue.bits.uop.ctrl.fuType === FuType.vdiv) -> vdivIss.issue.ready,
-    ))
+    issueIn.issue.ready := true.B
 
     private val issueFuHit = issueNode.in.head._2._2.exuConfigs.flatMap(_.fuConfigs).map(_.fuType === issueIn.issue.bits.uop.ctrl.fuType).reduce(_|_)
     when(issueIn.issue.valid){assert(issueFuHit)}

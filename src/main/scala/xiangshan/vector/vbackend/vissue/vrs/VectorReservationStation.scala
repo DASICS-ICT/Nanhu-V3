@@ -96,19 +96,19 @@ class VectorReservationStationImpl(outer:VectorReservationStation, param:RsParam
   private val fuTypeList = issue.flatMap(_._2.exuConfigs).filterNot(_.exuType == ExuType.vdiv).flatMap(_.fuConfigs).map(_.fuType)
   private val vdivWb = wakeup.filter(w => w._2.name == "VDivExu").map(_._1)
 
-  private val orderedSelectNetwork = Module(new VrsSelectNetwork(param.bankNum, entriesNumPerBank, issue.length, true, false, 0, fuTypeList, Some(s"VectorOrderedSelectNetwork")))
-  private val unorderedSelectNetwork = Module(new VrsSelectNetwork(param.bankNum, entriesNumPerBank, issue.length, false, false, 0, fuTypeList, Some(s"VectorUnorderedSelectNetwork")))
-  private val divSelectNetwork = Module(new VrsSelectNetwork(param.bankNum, entriesNumPerBank, issue.length, false, true, vdivWb.length, Seq(vdiv), Some(s"VectorDivSelectNetwork")))
-  orderedSelectNetwork.io.orderedCtrl.get := oiq.io.ctrl
-  private val selectNetworkSeq = Seq(orderedSelectNetwork, unorderedSelectNetwork, divSelectNetwork)
-  selectNetworkSeq.foreach(sn => {
-    sn.io.selectInfo.zip(rsBankSeq).foreach({ case (sink, source) =>
-      sink := source.io.selectInfo
-    })
-    sn.io.redirect := io.redirect
-  })
+  // private val orderedSelectNetwork = Module(new VrsSelectNetwork(param.bankNum, entriesNumPerBank, issue.length, true, false, 0, fuTypeList, Some(s"VectorOrderedSelectNetwork")))
+  // private val unorderedSelectNetwork = Module(new VrsSelectNetwork(param.bankNum, entriesNumPerBank, issue.length, false, false, 0, fuTypeList, Some(s"VectorUnorderedSelectNetwork")))
+  // private val divSelectNetwork = Module(new VrsSelectNetwork(param.bankNum, entriesNumPerBank, issue.length, false, true, vdivWb.length, Seq(vdiv), Some(s"VectorDivSelectNetwork")))
+  // orderedSelectNetwork.io.orderedCtrl.get := oiq.io.ctrl
+  // private val selectNetworkSeq = Seq(orderedSelectNetwork, unorderedSelectNetwork, divSelectNetwork)
+  // selectNetworkSeq.foreach(sn => {
+  //   sn.io.selectInfo.zip(rsBankSeq).foreach({ case (sink, source) =>
+  //     sink := source.io.selectInfo
+  //   })
+  //   sn.io.redirect := io.redirect
+  // })
 
-  divSelectNetwork.io.tokenRelease.get.zip(vdivWb).foreach({case(a, b) => a := b})
+  // divSelectNetwork.io.tokenRelease.get.zip(vdivWb).foreach({case(a, b) => a := b})
 
   private var intBusyTableReadIdx = 0
   private var fpBusyTableReadIdx = 0
@@ -163,11 +163,12 @@ class VectorReservationStationImpl(outer:VectorReservationStation, param:RsParam
       issueDriver.io.redirect := io.redirect
 
       val finalIssueArbiter = Module(new Arbiter(new VrsSelectResp(param.bankNum, entriesNumPerBank), 3))
-      finalIssueArbiter.io.in(0) <> orderedSelectNetwork.io.issueInfo(orderedPortIdx)
-      finalIssueArbiter.io.in(1) <> unorderedSelectNetwork.io.issueInfo(unorderedPortIdx)
-      finalIssueArbiter.io.in(2) <> divSelectNetwork.io.issueInfo(divPortIdx)
+      finalIssueArbiter.io.in.map{input =>
+        input.valid := false.B
+        input.bits  := 0.U.asTypeOf(finalIssueArbiter.io.in(0).bits.cloneType)
+      }
 
-      oiq.io.issued := orderedSelectNetwork.io.issueInfo(orderedPortIdx).fire
+      oiq.io.issued := false.B//orderedSelectNetwork.io.issueInfo(orderedPortIdx).fire
 
       orderedPortIdx = orderedPortIdx + 1
       unorderedPortIdx = unorderedPortIdx + 1
